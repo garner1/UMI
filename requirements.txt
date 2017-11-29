@@ -1,0 +1,4 @@
+biopython==1.70
+pysam==0.11.2.2
+fastinterval==0.1.1
+path.py==10.3.1
