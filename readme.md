@@ -75,7 +75,7 @@ samtools view -@ 8 -S -b | \
 samtools sort -@ 8 -o sample_name.sorted.bam 
 ```
 
-## 3. make consensus
+# make consensus
 
 ```python
 from consensus_maker import ConsensusWorker
@@ -85,7 +85,7 @@ worker = ConsensusWorker('sample_name.sorted.bam', 'consensus.1.fastq', 'consens
 worker.output_pe_reads()
 ```
 
-## 4. TODO list
+# TODO list
 
 **TODO**:
 

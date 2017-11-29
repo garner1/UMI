@@ -6,7 +6,7 @@
 
 make consensus bam files from sorted bam file
 """
-
+import json
 from collections import defaultdict, Counter
 from functools import lru_cache
 
@@ -163,14 +163,10 @@ class ConsensusMaker(list):
 
 
 class ConsensusWorker(object):
-    def __init__(self, bam_in, read1, read2,
-                 bed_file=None,
-                 flank_size=20):
+    def __init__(self, bam_in, bed_file=None, flank_size=20):
         bam_file = pysam.AlignmentFile(bam_in, 'rb')
         self.bam_reader = bam_file.fetch(until_eof=True)
         self.bed_file = Path(bed_file)
-        self.read1 = read1
-        self.read2 = read2
         self.flank_size = flank_size
         self.cached_segments = {}
         self.stats = defaultdict(int)
@@ -211,7 +207,6 @@ class ConsensusWorker(object):
             if umi not in self.cached_segments:
                 self.cached_segments[umi] = ConsensusMaker(umi=umi)
             elif self.cached_segments[umi].within_distance(segment):
-
                 self.cached_segments[umi].append(segment)
             else:
                 yield self.cached_segments.pop(umi)
@@ -224,9 +219,12 @@ class ConsensusWorker(object):
                 continue
             yield read1, read2
 
-    def output_pe_reads(self):
-        with open(self.read1, 'w') as fp1, open(self.read2, 'w') as fp2:
+    def output_pe_reads(self, read1_file, read2_file):
+        with open(read1_file, 'w') as fp1, open(read2_file, 'w') as fp2:
             for read1, read2 in self.get_consensus_read():
                 fp1.write(read1.format('fastq'))
                 fp2.write(read2.format('fastq'))
-        print(self.stats)
+
+    def output_stats(self, stat_file):
+        with open(stat_file, 'w') as fp:
+            json.dump(self.stats, fp)
