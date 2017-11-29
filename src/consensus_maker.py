@@ -24,15 +24,14 @@ class ConsensusMaker(list):
     """
 
     def __init__(self, umi, distance=500,
-                 min_qual=10, min_freq=0.6, min_count=1,
-                 qual_n=2, max_n_count=3, max_n_ratio=0.03):
+                 min_qual=10, min_freq=0.6, min_reads=1,
+                 qual_n=2, max_n_count=3, max_n_ratio=0.03, **kwargs):
         """
-
         :param umi: UMI seq
         :param distance: maximum distance can be cached as ONE molecular
         :param min_qual: minimum quality of a base can be used for making consensus
         :param min_freq: minimum frequency to make a consensus base
-        :param min_count: minimum count of reads to make a consensus
+        :param min_reads: minimum number of reads to make a consensus
         :param qual_n: if can not make a consensus base, N will return, and the qual_n will set as the quality
         :param max_n_count: maximum N count can be exist in the consensus read
         :param max_n_ratio: maximum N ratio can be exist in the consensus read
@@ -43,7 +42,7 @@ class ConsensusMaker(list):
         self.min_qual = min_qual
         self.min_freq = min_freq
         self.qual_n = qual_n
-        self.min_count = min_count
+        self.min_count = min_reads
         self.max_n_count = max_n_count
         self.max_n_ratio = max_n_ratio
 
@@ -163,11 +162,12 @@ class ConsensusMaker(list):
 
 
 class ConsensusWorker(object):
-    def __init__(self, bam_in, bed_file=None, flank_size=20):
+    def __init__(self, bam_in, bed_file=None, flank_size=20, **kwargs):
         bam_file = pysam.AlignmentFile(bam_in, 'rb')
         self.bam_reader = bam_file.fetch(until_eof=True)
         self.bed_file = Path(bed_file)
         self.flank_size = flank_size
+        self.kwargs = kwargs
         self.cached_segments = {}
         self.stats = defaultdict(int)
 
@@ -205,7 +205,7 @@ class ConsensusWorker(object):
                 continue
             umi = self.get_umi(segment)
             if umi not in self.cached_segments:
-                self.cached_segments[umi] = ConsensusMaker(umi=umi)
+                self.cached_segments[umi] = ConsensusMaker(umi, **self.kwargs)
             elif self.cached_segments[umi].within_distance(segment):
                 self.cached_segments[umi].append(segment)
             else:
