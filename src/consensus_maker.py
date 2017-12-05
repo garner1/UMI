@@ -9,12 +9,24 @@ make consensus bam files from sorted bam file
 import json
 from collections import defaultdict, Counter
 from functools import lru_cache
+from multiprocessing import Pool, cpu_count
 
 import pysam
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from fastinterval import Interval
 from path import Path
+
+
+class MySegments(object):
+    def __init__(self, segment):
+        attributions = ['query_name', 'query_length',
+                        'query_alignment_sequence', 'query_alignment_qualities',
+                        'reference_name', 'reference_start', 'reference_end',
+                        'is_read1', 'is_read2',
+                        'cigarstring']
+        for attr in attributions:
+            setattr(self, attr, getattr(segment, attr))
 
 
 class ConsensusMaker(list):
@@ -162,7 +174,8 @@ class ConsensusMaker(list):
 
 
 class ConsensusWorker(object):
-    def __init__(self, bam_in, bed_file=None, flank_size=20, **kwargs):
+    def __init__(self, bam_in, bed_file=None, flank_size=20, threads=cpu_count(), **kwargs):
+        self.threads = threads
         bam_file = pysam.AlignmentFile(bam_in, 'rb')
         self.bam_reader = bam_file.fetch(until_eof=True)
         self.bed_file = Path(bed_file)
@@ -188,7 +201,9 @@ class ConsensusWorker(object):
     def within_interval(self, segment):
         if not self.intervals:
             return True
-        current_position = Interval(segment.reference_start, segment.reference_end, chrom=segment.reference_name)
+        current_position = Interval(segment.reference_start or 0,
+                                    segment.reference_end or segment.reference_start + segment.query_length,
+                                    chrom=segment.reference_name)
         for interval in self.intervals:
             if interval.distance(current_position) < self.flank_size:
                 return True
@@ -200,6 +215,9 @@ class ConsensusWorker(object):
 
     def get_segments(self):
         for segment in self.bam_reader:
+            if segment.is_unmapped:
+                continue
+            segment = MySegments(segment)
             if not self.within_interval(segment):
                 self.stats['off target'] += 1
                 continue
@@ -210,6 +228,30 @@ class ConsensusWorker(object):
                 self.cached_segments[umi].append(segment)
             else:
                 yield self.cached_segments.pop(umi)
+
+    def get_async_results(self, results):
+        for result in results:
+            read1, read2, status = result.get()
+            self.stats[status] += 1
+            if not read1 or not read2:
+                continue
+            yield read1, read2
+
+    def async_get_consensus_read(self):
+        pool = Pool(self.threads)
+        async_results = []
+        for consensus_maker in self.get_segments():
+            async_results.append(pool.apply_async(consensus_maker.get_consensus_read))
+        for read1, read2 in self.get_async_results(async_results):
+            yield read1, read2
+        pool.close()
+        pool.join()
+
+    def async_output_pe_reads(self, read1_file, read2_file):
+        with open(read1_file, 'w') as fp1, open(read2_file, 'w') as fp2:
+            for read1, read2 in self.async_get_consensus_read():
+                fp1.write(read1.format('fastq'))
+                fp2.write(read2.format('fastq'))
 
     def get_consensus_read(self):
         for consensus_maker in self.get_segments():
