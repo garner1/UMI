@@ -1,6 +1,7 @@
 import argparse
 
 from path import Path
+from src.consensus_analysis import plot_reads_distribution
 from src.consensus_maker import ConsensusWorker
 
 
@@ -25,6 +26,12 @@ def parse_args():
     parser.add_argument('-b', '--bed_file', dest='bed_file',
                         metavar='FILE', type=Path, default=None,
                         help="target intervals")
+    parser.add_argument('-t', '--threads', dest='threads',
+                        metavar='INT', type=int, default=8,
+                        help="set threads number, [8]")
+    parser.add_argument('--report', dest='report',
+                        metavar='FILE', type=Path, default=None,
+                        help="figure report file")
     parser.add_argument('--flank_size', dest='flank_size', metavar='INT', type=int, default=20,
                         help="flank size, [20]")
     parser.add_argument('--min_reads', dest='min_reads', metavar='INT', type=int, default=1,
@@ -46,5 +53,7 @@ def parse_args():
 
 args = parse_args()
 worker = ConsensusWorker(**vars(args))
-worker.output_pe_reads(args.reads1, args.reads2)
+worker.async_get_consensus_read()
 worker.output_stats(args.stat_file)
+if args.report:
+    plot_reads_distribution(args.reads1, args.report)

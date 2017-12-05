@@ -19,6 +19,10 @@ from path import Path
 
 
 class MySegments(object):
+    """
+    copy attributions of pysam.libcalignedsegment.AlignedSegment objects,
+    make sure it can be pickle-able.
+    """
     def __init__(self, segment):
         attributions = ['query_name', 'query_length',
                         'query_alignment_sequence', 'query_alignment_qualities',
