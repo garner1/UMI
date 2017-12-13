@@ -53,7 +53,8 @@ def parse_args():
 
 args = parse_args()
 worker = ConsensusWorker(**vars(args))
-worker.async_get_consensus_read()
+# worker.async_output_pe_reads(args.reads1, args.reads2)
+worker.output_pe_reads(args.reads1, args.reads2)
 worker.output_stats(args.stat_file)
 if args.report:
     plot_reads_distribution(args.reads1, args.report)

@@ -10,7 +10,7 @@ import json
 from collections import defaultdict, Counter
 from functools import lru_cache
 from multiprocessing import Pool, cpu_count
-
+from multiprocessing.pool import Pool, ThreadPool
 import pysam
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
@@ -168,7 +168,8 @@ class ConsensusMaker(list):
             return None, None, 'reads1 too less'
         if segments_count_for_read2 < self.min_count:
             return None, None, 'reads2 too less'
-        consensus_id = f'{self.umi}:{segments_count_for_read1}:{segments_count_for_read2}'
+        pos_reg = f'{self.chrom}_{self.position}'
+        consensus_id = f'{self.umi}:{pos_reg}:{segments_count_for_read1}:{segments_count_for_read2}'
         read1_consensus.id = consensus_id
         read2_consensus.id = consensus_id
         return read1_consensus, read2_consensus, 'success'
@@ -234,20 +235,27 @@ class ConsensusWorker(object):
                 yield self.cached_segments.pop(umi)
 
     def get_async_results(self, results):
-        for result in results:
-            read1, read2, status = result.get()
-            self.stats[status] += 1
-            if not read1 or not read2:
-                continue
-            yield read1, read2
+        for i in list(results):
+            r = results[i]
+            if r.ready():
+                r = results.pop(i)
+                read1, read2, status = r.get()
+                self.stats[status] += 1
+                if not read1 or not read2:
+                    continue
+                yield read1, read2
 
     def async_get_consensus_read(self):
-        pool = Pool(self.threads)
-        async_results = []
-        for consensus_maker in self.get_segments():
-            async_results.append(pool.apply_async(consensus_maker.get_consensus_read))
-        for read1, read2 in self.get_async_results(async_results):
-            yield read1, read2
+        pool = ThreadPool(self.threads)
+
+        async_results = {}
+        for ind, consensus_maker in enumerate(self.get_segments()):
+            async_results[ind] = pool.apply_async(consensus_maker.get_consensus_read)
+            for read1, read2 in self.get_async_results(async_results):
+                yield read1, read2
+        while async_results:
+            for read1, read2 in self.get_async_results(async_results):
+                yield read1, read2
         pool.close()
         pool.join()
 

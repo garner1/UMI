@@ -30,7 +30,7 @@ def plot_reads_distribution(fastq_file, out_file, x_max=8):
         ax.set_xlabel('#reads used')
         ax.set_ylabel('#consensus read')
         ax.set_xlim([1, x_max])
-        hist = ax.hist(array)
+        hist = ax.hist(array, bins=x_max)
         rects = hist[2]
         value = hist[0]
         sum_value = sum(value)
