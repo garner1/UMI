@@ -7,6 +7,9 @@
 analysis results from consensus_maker
 """
 
+import json
+from collections import defaultdict
+
 from Bio import SeqIO
 from matplotlib import pyplot as plt
 
@@ -18,7 +21,7 @@ def get_reads_count(fastq_file):
     reads2 = []
     with open(fastq_file) as fp:
         for record in SeqIO.parse(fp, 'fastq'):
-            umi, r1, r2 = record.id.split(':')
+            umi, pos_reg, r1, r2 = record.id.split(':')
             reads1.append(int(r1))
             reads2.append(int(r2))
     return reads1, reads2
@@ -30,7 +33,7 @@ def plot_reads_distribution(fastq_file, out_file, x_max=8):
         ax.set_xlabel('#reads used')
         ax.set_ylabel('#consensus read')
         ax.set_xlim([1, x_max])
-        hist = ax.hist(array, bins=x_max)
+        hist = ax.hist(array, bins=x_max, range=(1, x_max))
         rects = hist[2]
         value = hist[0]
         sum_value = sum(value)
@@ -50,3 +53,13 @@ def plot_reads_distribution(fastq_file, out_file, x_max=8):
     subplot_distribution(ax2, reads2, 'Reads2')
 
     fig.savefig(out_file)
+
+
+def count_umi(fastq_file, result_json):
+    umi_dict = defaultdict(lambda: defaultdict(list))
+    with open(fastq_file) as fp:
+        for record in SeqIO.parse(fp, 'fastq'):
+            umi, pos, reads1, reads2 = record.id.split(':')
+            umi_dict[umi][pos].append(f'{reads1}:{reads2}')
+    with open(result_json, 'w') as fp:
+        json.dump(umi_dict, fp)

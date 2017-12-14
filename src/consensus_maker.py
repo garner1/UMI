@@ -9,8 +9,9 @@ make consensus bam files from sorted bam file
 import json
 from collections import defaultdict, Counter
 from functools import lru_cache
-from multiprocessing import Pool, cpu_count
-from multiprocessing.pool import Pool, ThreadPool
+from multiprocessing import cpu_count
+from multiprocessing.pool import ThreadPool
+
 import pysam
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
@@ -23,6 +24,7 @@ class MySegments(object):
     copy attributions of pysam.libcalignedsegment.AlignedSegment objects,
     make sure it can be pickle-able.
     """
+
     def __init__(self, segment):
         attributions = ['query_name', 'query_length',
                         'query_alignment_sequence', 'query_alignment_qualities',
@@ -168,6 +170,9 @@ class ConsensusMaker(list):
             return None, None, 'reads1 too less'
         if segments_count_for_read2 < self.min_count:
             return None, None, 'reads2 too less'
+        read2_consensus = read2_consensus.reverse_complement()
+        read2_consensus.description = ''
+
         pos_reg = f'{self.chrom}_{self.position}'
         consensus_id = f'{self.umi}:{pos_reg}:{segments_count_for_read1}:{segments_count_for_read2}'
         read1_consensus.id = consensus_id
@@ -193,23 +198,25 @@ class ConsensusWorker(object):
     @lru_cache(1)
     def intervals(self):
         if self.bed_file is None:
-            return []
+            return {}
         if not self.bed_file.exists:
             raise ValueError(f"can not find the bed file: {self.bed_file}")
-        intervals = []
+        intervals = defaultdict(list)
         with open(self.bed_file) as fp:
             for line in fp:
                 chrom, start, end, *_ = line.strip().split('\t')
-                intervals.append(Interval(int(start), int(end), chrom=chrom))
-        return Interval.merge(intervals)
+                intervals[chrom].append(Interval(int(start), int(end), chrom=chrom))
+        return {chrom: Interval.merge(intervals[chrom]) for chrom in intervals}
 
     def within_interval(self, segment):
         if not self.intervals:
             return True
+        if segment.reference_name not in self.intervals:
+            return False
         current_position = Interval(segment.reference_start or 0,
                                     segment.reference_end or segment.reference_start + segment.query_length,
                                     chrom=segment.reference_name)
-        for interval in self.intervals:
+        for interval in self.intervals[segment.reference_name]:
             if interval.distance(current_position) < self.flank_size:
                 return True
         return False
